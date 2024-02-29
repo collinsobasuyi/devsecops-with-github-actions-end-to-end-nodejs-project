@@ -4,12 +4,27 @@ on:
   workflow_dispatch:  # Allows manual triggering of the workflow.
 
 jobs:
-  build:
+  lint_code:
     runs-on: ubuntu-latest
+    name: Lint Codebase with ESLint
+    steps:
+      - uses: actions/checkout@master
+      - name: Setup Node.js
+        uses: actions/setup-node@master
+        with:
+          node-version: '16' # Adjust this to match your project's Node.js version
+          cache: 'npm'
+      - run: npm install
+      - name: Run ESLint
+        run: npx eslint . --ext .js,.jsx,.ts,.tsx # Adjust this to match your project's file extensions
+
+  sonar_cloud_unit_test_sast:
+    runs-on: ubuntu-latest
+    needs: lint_code
     name: Run unit tests and SAST scan on the source code 
     steps:
-    - uses: actions/checkout@v3
-    - uses: actions/setup-node@v3
+    - uses: actions/checkout@master
+    - uses: actions/setup-node@master
       with:
         node-version: 16
         cache: npm
@@ -23,9 +38,19 @@ jobs:
         args: >
           -Dsonar.organization=devsecops-github-actions-nodejs-project
           -Dsonar.projectKey=devsecops-github-actions-nodejs-project
-  security:
+  gitleaks_secret_scan_sca:
     runs-on: ubuntu-latest
-    needs: build
+    needs: sonar_cloud_unit_test_sast
+    name: Gitleaks Secret Scan
+    steps:
+      - uses: actions/checkout@master
+      - name: Run git leaks to check for secrets
+        uses: gitleaks/gitleaks-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  snyk_security_scan_sca:
+    runs-on: ubuntu-latest
+    needs: gitleaks_secret_scan_sca
     name: Run the SCA scan on the source code
     steps:
       - uses: actions/checkout@master
@@ -34,17 +59,17 @@ jobs:
         continue-on-error: true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-  zap_scan:
+  zap_security_scan_dast:
     runs-on: ubuntu-latest
-    needs: security
+    needs: snyk_security_scan_sca
     name: Run DAST scan on the web application
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@master
         with:
           ref: master
       - name: ZAP Scan
-        uses: zaproxy/action-baseline@v0.6.1
+        uses: zaproxy/action-baseline@master
         with:
           docker_name: 'owasp/zap2docker-stable'
           target: 'http://example.com/'
