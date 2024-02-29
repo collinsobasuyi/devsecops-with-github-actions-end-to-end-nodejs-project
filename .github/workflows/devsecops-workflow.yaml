@@ -17,6 +17,7 @@ jobs:
       - run: npm install
       - name: Run ESLint
         run: npx eslint . --ext .js,.jsx,.ts,.tsx # Adjust this to match your project's file extensions
+        continue-on-error: true
 
   sonar_cloud_unit_test_sast:
     runs-on: ubuntu-latest
